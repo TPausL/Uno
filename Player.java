@@ -4,17 +4,18 @@ import java.util.Random;
 /**
  * ClientModel
  */
-public class ClientModel {
+public class Player extends GameClient {
 
     private String name = "unknown";
-    private String ip, id;
-    private Integer port;
     private List<Card> cards;
 
-    ClientModel(String ip, Integer port) {
-        this.id = genId();
-        this.ip = ip;
-        this.port = port;
+    Player(String ip, Integer port) {
+        super(ip, port);
+        cards = new List<Card>();
+    }
+
+    Player(GameClient client) {
+        super(client.ip, client.port, client.id);
         cards = new List<Card>();
     }
 
@@ -23,7 +24,7 @@ public class ClientModel {
     }
 
     public void addCards(List<Card> cards) {
-        cards.concat(cards);
+        this.cards.concat(cards);
     }
 
     public void addCard(Card card) {
@@ -55,26 +56,6 @@ public class ClientModel {
         this.name = name;
     }
 
-    private String genId() {
-        byte[] array = new byte[7];
-        new Random().nextBytes(array);
-        return new String(array, Charset.forName("UTF-8"));
-    }
-
-    /**
-     * @return the id
-     */
-    public String getId() {
-        return id;
-    }
-
-    /**
-     * @return the ip
-     */
-    public String getIp() {
-        return ip;
-    }
-
     /**
      * @return the name
      */
@@ -82,14 +63,4 @@ public class ClientModel {
         return name;
     }
 
-    /**
-     * @return the port
-     */
-    public Integer getPort() {
-        return port;
-    }
-
-    public String toString() {
-        return this.id;
-    }
 }

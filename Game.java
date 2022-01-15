@@ -1,172 +1,153 @@
-/**
- * Game
- */
-public class Game extends Server {
+import java.util.Arrays;
+
+public class Game {
 
     private Pile pile;
-    private List<ClientModel> clients;
-    private String[] playerIds;
-    private int curPlayer, turnDirection;
-    private boolean drawn = false, started = false;
+    private List<Player> connected;
+    private String[] playing;
+    private int current, direction;
+    private boolean drawn, turnDone, skip;
 
-    public Game(Integer port) {
-        super(port);
+    public void start(List<Player> clients) {
+        this.connected = clients;
         pile = new Pile();
-        clients = new List<ClientModel>();
-        turnDirection = 1;
-    }
-
-    public void processClosingConnection(String pClientIP, int pClientPort) {
-        System.out.println("disconnect/" + pClientIP + ":" + pClientPort);
-        ClientModel client = getByIp(pClientIP, pClientPort);
-        Util.removeFromList(clients, client);
-        if (playerIds.length - 1 == 1) {
-            sendToAll("win");
-        }
-        pile.reinsert(client.getCards());
-        String[] newPlayers = new String[playerIds.length - 1];
+        playing = new String[Util.listLength(connected)];
+        direction = 1;
         int i = 0;
-        for (String id : playerIds) {
-            if (!id.equals(client.getId())) {
-                newPlayers[i] = id;
-            }
+        for (clients.toFirst(); clients.hasAccess(); clients.next()) {
+            playing[i] = clients.getContent().getId();
             i++;
         }
-        playerIds = newPlayers;
+        current = (int) Math.floor(Math.random() * playing.length);
     }
 
-    public void processMessage(String pClientIP, int pClientPort, String pMessage) {
-        String[] split = pMessage.split(":");
-        String command = split[0].toLowerCase();
-        String data = "";
-        try {
-            data = split[1].toLowerCase();
-        } catch (Exception e) {
-        }
-        ClientModel sender = getByIp(pClientIP, pClientPort);
-        try {
-            switch (command) {
-                case "name":
-                    sender.setName(data);
-                    sendToClient(sender, "ok");
-                    return;
-                case "start":
-                    if (started) {
-                        sendToClient(sender, "error:Game running");
-                        return;
-                    }
-                    started = true;
-                    playerIds = new String[Util.listLength(clients)];
-                    int i = 0;
-                    for (clients.toFirst(); clients.hasAccess(); clients.next()) {
-                        playerIds[i] = clients.getContent().getId();
-                        i++;
-                        giveCardsTo(clients.getContent(), 7);
-                    }
-                    curPlayer = (int) Math.floor(Math.random() * playerIds.length);
-                    this.sendToAll("game started");
-                    sendToAll("top:" + pile.getTop());
-                    sendToClient(getById(playerIds[curPlayer]), "turn:start");
-                    return;
-                case "card":
-                    if (!pClientIP.equals(getById(playerIds[curPlayer]).getIp())
-                            || pClientPort != getById(playerIds[curPlayer]).getPort()) {
-                        sendToClient(sender, "error:Not your turn!");
-                        return;
-                    }
-                    Card card = new Card(data);
-                    if (checkActionValidity(card)) {
-                        if (sender.removeCard(card)) {
-                            pile.putDown(card);
-                            executeCardActions(sender, card);
-                            return;
-                        } else {
-                            sendToClient(sender, "error:Not in your possession");
-                        }
-                    } else {
-                        sendToClient(sender, "error:Card not allowed");
-                    }
-                    return;
-                case "draw":
-                    if (!pClientIP.equals(getById(playerIds[curPlayer]).getIp())
-                            || pClientPort != getById(playerIds[curPlayer]).getPort()) {
-                        sendToClient(sender, "error:" + "Not your turn!");
-                        return;
-                    }
-                    if (drawn) {
-                        sendToClient(sender, "error:Can't draw twice!");
-                    } else {
-                        drawn = true;
-                        giveCardsTo(sender, 1);
-                    }
-                    return;
-                case "turn":
-                    if (data.equals("end")) {
-                        if (drawn) {
-                            nextTurn(sender, false);
-                        } else {
-                            sendToClient(sender, "error:Can't end turn without playing or drawing a card!");
-                        }
-                    } else {
-                        sendToClient(sender, "error:Invalid command");
-                    }
-                    return;
-                default:
-                    sendToClient(sender, "error:Invalid command");
-                    break;
+    public boolean isPlaying(GameClient client) {
+        return Util.findInList(connected, (Player) client) != null;
+    }
+
+    public List<Player> getPlayers() {
+        return this.connected;
+    }
+
+    // 0,1,2 1
+    // 0,2
+    // TODO wenn remove > current wird einer übersprungen
+    public boolean removePlayer(GameClient c) {
+        Player player = (Player) c;
+        Util.removeFromList(connected, (Player) c);
+        String currentId = playing[current];
+        playing = Util.removeFromArray(playing, c.getId());
+        pile.reinsert(player.getCards());
+        if (player.idEquals(currentId)) {
+            next();
+            return true;
+        } else {
+            int i = 0;
+            for (String id : playing) {
+                if (id != currentId) {
+                    i++;
+                } else {
+                    current = i;
+                    return false;
+                }
             }
-        } catch (Exception e) {
-            sendToClient(sender, "error:" + e.getMessage());
         }
+        return false;
     }
 
-    public void processNewConnection(String pClientIP, int pClientPort) {
-        System.out.println("connect/" + pClientIP + ":" + pClientPort);
-        clients.append(new ClientModel(pClientIP, pClientPort));
+    public Card getTop() {
+        return pile.getTop();
     }
 
-    private List<Card> giveCardsTo(ClientModel recipient, int number) {
-        List<Card> returnList = new List<Card>();
-        for (int i = 0; i < number; i++) {
-            Card c = pile.take();
-            recipient.addCard(c);
-            returnList.append(c);
-            sendToClient(recipient, "card:" + c);
+    public Player getCurrent() {
+        if (playing == null)
+            return null;
+        if (playing.length <= 0) {
+            return null;
         }
-        return returnList;
+        return getById(playing[current]);
     }
 
-    private void sendToClient(ClientModel c, String message) {
-        this.send(c.getIp(), c.getPort(), message);
+    public Player getNext() {
+        return getById(playing[(((current + direction) % playing.length) + playing.length) % playing.length]);
     }
 
-    private ClientModel getByIp(String ip, Integer port) {
-        for (clients.toFirst(); clients.hasAccess(); clients.next()) {
-            ClientModel c = clients.getContent();
-            if (c.getIp().equals(ip) && c.getPort().equals(port)) {
-                return clients.getContent();
+    public void next() {
+        drawn = false;
+        turnDone = false;
+        current = ((((current + (skip ? 2 : 1) * direction)) % playing.length) + playing.length) % playing.length;
+        skip = false;
+    }
+
+    private void reverse() {
+        direction *= -1;
+    }
+
+    private Player getById(String id) {
+        for (connected.toFirst(); connected.hasAccess(); connected.next()) {
+            Player p = connected.getContent();
+            if (p.getId().equals(id)) {
+                return p;
             }
         }
         return null;
     }
 
-    private ClientModel checkWin() {
-        for (String id : playerIds) {
-            if (getById(id).getCardCount() == 0) {
-                return getById(id);
-            }
+    public Card[] deal(String id) {
+        Player p = getById(id);
+        Card[] cards = new Card[7];
+        List<Card> c = new List<>();
+        for (int i = 0; i < 7; i++) {
+            Card t = pile.take();
+            cards[i] = t;
+            c.append(t);
         }
-        return null;
+        p.addCards(c);
+        return cards;
     }
 
-    private ClientModel getById(String id) {
-        for (clients.toFirst(); clients.hasAccess(); clients.next()) {
-            ClientModel c = clients.getContent();
-            if (c.getId().equals(id)) {
-                return c;
+    public Card draw() {
+        if (drawn)
+            return null;
+        drawn = true;
+        Card c = pile.take();
+        getById(playing[current]).addCard(c);
+        turnDone = true;
+        return c;
+    }
+
+    public Card[] playCard(Card c) {
+        if (checkActionValidity(c)) {
+            Player current = getCurrent();
+            if (current.removeCard(c)) {
+                turnDone = true;
+                pile.putDown(c);
+                return executeCardActions(c);
+            } else {
+                return null;
             }
+        } else {
+            return null;
         }
-        return null;
+    }
+
+    private Card[] executeCardActions(Card c) {
+        switch (c.getValue()) {
+            case "+2":
+                skip = true;
+                return pile.take(2);
+            case "+4":
+                skip = true;
+                return pile.take(4);
+            case "s":
+                skip = true;
+                return new Card[0];
+            case "r":
+                reverse();
+                return new Card[0];
+            default:
+                return new Card[0];
+        }
     }
 
     private boolean checkActionValidity(Card c) {
@@ -177,45 +158,34 @@ public class Game extends Server {
         return cVal.equals(top.getValue()) || cCol.equals(top.getColor()) || cVal.equals("+4") || cVal.equals("c");
     }
 
-    private void executeCardActions(ClientModel sender, Card c) {
-        int next = (((curPlayer + turnDirection) % playerIds.length) + playerIds.length) % playerIds.length;
-        switch (c.getValue()) {
-            case "+2":
-                giveCardsTo(getById(playerIds[next]), 2);
-                nextTurn(sender, true);
-                break;
-            case "+4":
-                giveCardsTo(getById(playerIds[next]), 4);
-                nextTurn(sender, true);
-                break;
-            case "s":
-                nextTurn(sender, true);
-                break;
-            case "r":
-                turnDirection *= -1;
-                nextTurn(sender, false);
-                break;
-            default:
-                nextTurn(sender, false);
-                break;
+    public Card parseCard(String data) {
+        String color, value;
+        try {
+            String[] split_data = data.split("_");
+            color = split_data[0];
+            value = split_data[1];
+            String[] colors = { "r", "g", "b", "y" };
+            String[] values = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "+2", "+4", "s", "r", "c" };
+            if (!Arrays.asList(colors).contains(color) || !Arrays.asList(values).contains(value))
+                throw new Exception();
+        } catch (Exception e) {
+            return null;
         }
+        return new Card(value, color);
     }
 
-    private void nextTurn(ClientModel sender, boolean skip) {
-        drawn = false;
-        sendToClient(sender, "turn:end");
-        if (checkWin() != null) {
-            sendToAll("win:" + checkWin().getName() + " won!");
-            pile = new Pile();
-            turnDirection = 1;
-            started = false;
-            return;
+    public Player checkWin() {
+        if (playing.length == 1)
+            return getById(playing[0]);
+        for (String id : playing) {
+            if (getById(id).getCardCount() == 0) {
+                return getById(id);
+            }
         }
-        sendToAll("top:" + pile.getTop());
-        curPlayer = (((curPlayer + (skip ? 2 : 1) * turnDirection) % playerIds.length) + playerIds.length)
-                % playerIds.length;
-        sendToClient(getById(playerIds[curPlayer]),
-                "**" + Util.listToString(getById(playerIds[curPlayer]).getCards()) + "**");
-        sendToClient(getById(playerIds[curPlayer]), "turn:start");
+        return null;
+    }
+
+    public boolean turnDone() {
+        return this.turnDone;
     }
 }

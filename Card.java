@@ -11,17 +11,6 @@ public class Card {
         this.value = value;
     }
 
-    Card(String message) throws Exception {
-        String[] split;
-        try {
-            split = message.split("_");
-        } catch (Exception e) {
-            throw new Exception("Invalid message");
-        }
-        this.color = split[0];
-        this.value = split[1];
-    }
-
     /**
      * @return the color
      */

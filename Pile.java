@@ -9,11 +9,6 @@ public class Pile {
         top = take();
     }
 
-    public void drawTop() {
-        putDown(top);
-        top = take();
-    }
-
     public Card take() {
         int length = Util.listLength(draw);
         if (length == 0)
@@ -26,6 +21,24 @@ public class Pile {
         Card c = draw.getContent();
         draw.remove();
         return c;
+    }
+
+    public Card[] take(int count) {
+        Card[] cards = new Card[count];
+        for (int i = 0; i < count; i++) {
+            int length = Util.listLength(draw);
+            if (length == 0)
+                restock();
+            draw.toFirst();
+            int random = (int) Math.floor(Math.random() * length);
+            for (int j = 0; j < random; j++) {
+                draw.next();
+            }
+            Card c = draw.getContent();
+            cards[i] = c;
+            draw.remove();
+        }
+        return cards;
     }
 
     public Card getTop() {
