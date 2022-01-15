@@ -3,8 +3,7 @@
  */
 public class Game extends Server {
 
-    private List<Card> draw, discard;
-    private Card top;
+    private Pile pile;
     private List<ClientModel> clients;
     private String[] playerIds;
     private int curPlayer, turnDirection;
@@ -12,23 +11,23 @@ public class Game extends Server {
 
     public Game(Integer port) {
         super(port);
-        draw = genCards();
-        discard = new List<Card>();
+        pile = new Pile();
         clients = new List<ClientModel>();
         turnDirection = 1;
     }
 
     public void processClosingConnection(String pClientIP, int pClientPort) {
-        System.out.print("disconnect/" + pClientIP + ":" + pClientPort);
+        System.out.println("disconnect/" + pClientIP + ":" + pClientPort);
         ClientModel client = getByIp(pClientIP, pClientPort);
-        if(playerIds.length-1 == 1) {
+        Util.removeFromList(clients, client);
+        if (playerIds.length - 1 == 1) {
             sendToAll("win");
         }
-        discard.concat(client.getCards());
-        String[] newPlayers = new String[playerIds.length-1];
+        pile.reinsert(client.getCards());
+        String[] newPlayers = new String[playerIds.length - 1];
         int i = 0;
-        for(String id : playerIds){
-            if(!id.equals(client.getId())){
+        for (String id : playerIds) {
+            if (!id.equals(client.getId())) {
                 newPlayers[i] = id;
             }
             i++;
@@ -36,13 +35,14 @@ public class Game extends Server {
         playerIds = newPlayers;
     }
 
-    public void processMessage(String pClientIP, int pClientPort, String pMessage)  {
+    public void processMessage(String pClientIP, int pClientPort, String pMessage) {
         String[] split = pMessage.split(":");
         String command = split[0].toLowerCase();
         String data = "";
         try {
             data = split[1].toLowerCase();
-        } catch (Exception e){}
+        } catch (Exception e) {
+        }
         ClientModel sender = getByIp(pClientIP, pClientPort);
         try {
             switch (command) {
@@ -51,12 +51,12 @@ public class Game extends Server {
                     sendToClient(sender, "ok");
                     return;
                 case "start":
-                    if(started){
+                    if (started) {
                         sendToClient(sender, "error:Game running");
                         return;
                     }
                     started = true;
-                    playerIds = new String[getLength(clients)];
+                    playerIds = new String[Util.listLength(clients)];
                     int i = 0;
                     for (clients.toFirst(); clients.hasAccess(); clients.next()) {
                         playerIds[i] = clients.getContent().getId();
@@ -64,21 +64,20 @@ public class Game extends Server {
                         giveCardsTo(clients.getContent(), 7);
                     }
                     curPlayer = (int) Math.floor(Math.random() * playerIds.length);
-                    System.out.println(curPlayer);
                     this.sendToAll("game started");
-                    this.top = takeCard();
-                    sendToAll("top:" + this.top);
+                    sendToAll("top:" + pile.getTop());
                     sendToClient(getById(playerIds[curPlayer]), "turn:start");
                     return;
                 case "card":
-                    if( !pClientIP.equals(getById(playerIds[curPlayer]).getIp()) ||  pClientPort != getById(playerIds[curPlayer]).getPort() ){
+                    if (!pClientIP.equals(getById(playerIds[curPlayer]).getIp())
+                            || pClientPort != getById(playerIds[curPlayer]).getPort()) {
                         sendToClient(sender, "error:Not your turn!");
                         return;
                     }
                     Card card = new Card(data);
-                    if(checkActionValidity(card)){
-                        if(sender.removeCard(card)) {
-                            setTop(card);
+                    if (checkActionValidity(card)) {
+                        if (sender.removeCard(card)) {
+                            pile.putDown(card);
                             executeCardActions(sender, card);
                             return;
                         } else {
@@ -89,12 +88,12 @@ public class Game extends Server {
                     }
                     return;
                 case "draw":
-                    if( !pClientIP.equals(getById(playerIds[curPlayer]).getIp()) ||  pClientPort != getById(playerIds[curPlayer]).getPort() ){
+                    if (!pClientIP.equals(getById(playerIds[curPlayer]).getIp())
+                            || pClientPort != getById(playerIds[curPlayer]).getPort()) {
                         sendToClient(sender, "error:" + "Not your turn!");
                         return;
                     }
-                    if(drawn) {
-                        //TODO Error
+                    if (drawn) {
                         sendToClient(sender, "error:Can't draw twice!");
                     } else {
                         drawn = true;
@@ -102,8 +101,8 @@ public class Game extends Server {
                     }
                     return;
                 case "turn":
-                    if(data.equals("end")){
-                        if(drawn){
+                    if (data.equals("end")) {
+                        if (drawn) {
                             nextTurn(sender, false);
                         } else {
                             sendToClient(sender, "error:Can't end turn without playing or drawing a card!");
@@ -116,7 +115,7 @@ public class Game extends Server {
                     sendToClient(sender, "error:Invalid command");
                     break;
             }
-        } catch (Exception e){
+        } catch (Exception e) {
             sendToClient(sender, "error:" + e.getMessage());
         }
     }
@@ -126,23 +125,10 @@ public class Game extends Server {
         clients.append(new ClientModel(pClientIP, pClientPort));
     }
 
-    private <T> int getLength(List<T> l) {
-        int i = 0;
-        for (l.toFirst(); l.hasAccess(); l.next()) {
-            i++;
-        }
-        return i;
-    }
-
     private List<Card> giveCardsTo(ClientModel recipient, int number) {
         List<Card> returnList = new List<Card>();
-        int length = getLength(draw);
-        if (length < number) {
-            draw.concat(discard);
-            discard = new List<>();
-        }
         for (int i = 0; i < number; i++) {
-            Card c = takeCard();
+            Card c = pile.take();
             recipient.addCard(c);
             returnList.append(c);
             sendToClient(recipient, "card:" + c);
@@ -164,9 +150,9 @@ public class Game extends Server {
         return null;
     }
 
-    private ClientModel checkWin(){
-        for(String id : playerIds){
-            if(getById(id).getCardCount() == 0){
+    private ClientModel checkWin() {
+        for (String id : playerIds) {
+            if (getById(id).getCardCount() == 0) {
                 return getById(id);
             }
         }
@@ -183,14 +169,16 @@ public class Game extends Server {
         return null;
     }
 
-    private boolean checkActionValidity(Card c){
-        if(c.getValue().equals("+4") || c.getValue().equals("s")) return true;
+    private boolean checkActionValidity(Card c) {
+        if (c.getValue().equals("+4") || c.getValue().equals("s"))
+            return true;
+        Card top = pile.getTop();
         String cVal = c.getValue(), cCol = c.getColor();
         return cVal.equals(top.getValue()) || cCol.equals(top.getColor()) || cVal.equals("+4") || cVal.equals("c");
     }
 
-    private void executeCardActions(ClientModel sender, Card c){
-        int next = (((curPlayer+turnDirection) % playerIds.length) + playerIds.length) % playerIds.length;
+    private void executeCardActions(ClientModel sender, Card c) {
+        int next = (((curPlayer + turnDirection) % playerIds.length) + playerIds.length) % playerIds.length;
         switch (c.getValue()) {
             case "+2":
                 giveCardsTo(getById(playerIds[next]), 2);
@@ -213,67 +201,21 @@ public class Game extends Server {
         }
     }
 
-    private void setTop(Card c){
-        discard.append(top);
-        top = c;
-    }
-
-    private Card takeCard() {
-        int length = getLength(draw);
-        draw.toFirst();
-        int random = (int) Math.floor(Math.random() * length);
-        for (int i = 0; i < random; i++) {
-            draw.next();
-        }
-        Card c = draw.getContent();
-        draw.remove();
-        return c;
-    }
-
-    private void nextTurn(ClientModel sender, boolean skip){
+    private void nextTurn(ClientModel sender, boolean skip) {
         drawn = false;
         sendToClient(sender, "turn:end");
-        if(checkWin() != null){
+        if (checkWin() != null) {
             sendToAll("win:" + checkWin().getName() + " won!");
-            draw = genCards();
-            discard = new List<Card>();
+            pile = new Pile();
             turnDirection = 1;
             started = false;
             return;
         }
-        sendToAll("top:"+top);
-        curPlayer = (((curPlayer+(skip ? 2 : 1)*turnDirection) % playerIds.length) + playerIds.length) % playerIds.length;
-        sendToClient(getById(playerIds[curPlayer]), "**" + listToString(getById(playerIds[curPlayer]).getCards())  + "**");
+        sendToAll("top:" + pile.getTop());
+        curPlayer = (((curPlayer + (skip ? 2 : 1) * turnDirection) % playerIds.length) + playerIds.length)
+                % playerIds.length;
+        sendToClient(getById(playerIds[curPlayer]),
+                "**" + Util.listToString(getById(playerIds[curPlayer]).getCards()) + "**");
         sendToClient(getById(playerIds[curPlayer]), "turn:start");
-    }
-
-    private String listToString(List<Card> l) {
-        String s = "";
-        for(l.toFirst();l.hasAccess();l.next()){
-            s += l.getContent() + ",";
-        }
-        return s;
-    }
-
-    private List<Card> genCards() {
-        List<Card> l = new List<Card>();
-        String[] colors = "r,g,y,b".split(",");
-        String[] valuesSingle = "0,+4,c".split(",");
-        String[] valuesDouble = "1,2,3,4,5,6,7,8,9,+2,s,r".split(",");
-        for (String c : colors) {
-            for (String v : valuesSingle) {
-                l.append(new Card(v, c));
-            }
-            for (String v : valuesDouble) {
-
-                l.append(new Card(v, c));
-            }
-            for (String v : valuesDouble) {
-
-                l.append(new Card(v, c));
-            }
-        }
-        System.out.println(getLength(l));
-        return l;
     }
 }

@@ -33,7 +33,9 @@ public class ClientModel {
     public boolean removeCard(Card c) {
         for (cards.toFirst(); cards.hasAccess(); cards.next()) {
             Card cur = cards.getContent();
-            if (c.toString().equals(cur.toString()) || (c.getValue().equals("+4") && c.getValue().equals(cur.getValue()) ) || (c.getValue().equals("c") && c.getValue().equals(cur.getValue()) )) {
+            if (c.toString().equals(cur.toString())
+                    || (c.getValue().equals("+4") && c.getValue().equals(cur.getValue()))
+                    || (c.getValue().equals("c") && c.getValue().equals(cur.getValue()))) {
                 cards.remove();
                 return true;
             }
@@ -85,5 +87,9 @@ public class ClientModel {
      */
     public Integer getPort() {
         return port;
+    }
+
+    public String toString() {
+        return this.id;
     }
 }

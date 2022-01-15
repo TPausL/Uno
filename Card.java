@@ -15,7 +15,7 @@ public class Card {
         String[] split;
         try {
             split = message.split("_");
-        } catch (Exception e){
+        } catch (Exception e) {
             throw new Exception("Invalid message");
         }
         this.color = split[0];
@@ -38,7 +38,6 @@ public class Card {
 
     @Override
     public String toString() {
-        // TODO Auto-generated method stub
         return color + "_" + value;
     }
 }
