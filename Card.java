@@ -49,6 +49,10 @@ public class Card implements HasId {
         return color + "_" + value;
     }
 
+    public boolean equals(Card c) {
+        return c.color.equals(this.color) && c.value.equals(this.value);
+    }
+
     public boolean isEqual(Card c) {
         return this.getId().equals(c.getId());
     }
