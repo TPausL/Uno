@@ -1,3 +1,4 @@
+import java.security.MessageDigest;
 import java.util.Arrays;
 
 /**
@@ -29,6 +30,12 @@ public class ConnectionHandler extends Server {
             if (!game.isPlaying(disconClient))
                 return;
             boolean isCurrent = game.removePlayer(disconClient);
+            if (Util.listLength(game.getPlayers()) <= 1) {
+                game.getPlayers().toFirst();
+                if (game.getPlayers().getContent() != null) {
+                    sendToAll("fullWin:" + game.getPlayers().getContent());
+                }
+            }
             if (checkWin()) {
                 gameRunning = false;
                 return;
@@ -54,6 +61,7 @@ public class ConnectionHandler extends Server {
         switch (command) {
             case "name":
                 sender.setName(data);
+                log(sender, data);
                 sendToClient(sender, "ok");
                 return;
             case "start":
@@ -63,6 +71,8 @@ public class ConnectionHandler extends Server {
                 }
                 gameRunning = true;
                 game.start(connected);
+                log(sender, "started|" + Util.listToString(game.getPlayers()));
+                Util.pointsTable(game.getPlayers()).print();
                 List<Player> p = game.getPlayers();
                 for (p.toFirst(); p.hasAccess(); p.next()) {
                     Card[] cards = game.deal(p.getContent().getId());
@@ -71,6 +81,7 @@ public class ConnectionHandler extends Server {
 
                     }
                 }
+                sendToAll("players:" + Util.listToString(game.getPlayers()));
                 sendToAll("top:" + game.getTop());
                 sendToClient(game.getCurrent(), "turn:start");
                 return;
@@ -89,6 +100,7 @@ public class ConnectionHandler extends Server {
                     this.sendToClient(sender, "error:You aren't allowed to play this card or don't own it!");
                     return;
                 }
+                log(sender, card);
                 for (Card c : toNext) {
                     this.sendToClient(game.getNext(), "card:" + c);
                     game.getNext().addCard(c);
@@ -146,11 +158,26 @@ public class ConnectionHandler extends Server {
     private boolean checkWin() {
         Player winner = game.checkWin();
         if (winner != null) {
-            sendToAll("win:" + winner.getName());
+            log(winner, "win");
+            List<Player> players = game.getPlayers();
+            for (players.toFirst(); players.hasAccess(); players.next()) {
+                winner.addPoints(players.getContent().getCardPoints());
+                sendToClient(winner, "points:" + winner.getPoints());
+                players.getContent().clearCards();
+            }
+            if (winner.getPoints() > 500) {
+                sendToAll("fullWin:" + winner);
+                game.resetPoints();
+            }
+            Util.pointsTable(players).print();
             gameRunning = false;
             return true;
         }
         return false;
+    }
+
+    private void log(Player sender, Object mesage) {
+        System.out.println(sender + "@" + sender.getPort() + "|" + mesage);
     }
 
 }

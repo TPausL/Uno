@@ -12,12 +12,13 @@ public class Util {
         for (l.toFirst(); l.hasAccess(); l.next()) {
             s += l.getContent() + ",";
         }
+        s = s.substring(0, s.length() - 1);
         return s;
     }
 
-    public static <T> void removeFromList(List<T> l, T object) {
+    public static <T extends HasId> void removeFromList(List<T> l, T object) {
         for (l.toFirst(); l.hasAccess(); l.next()) {
-            if (l.getContent().toString().equals(object.toString())) {
+            if (l.getContent().getId().equals(object.getId())) {
                 l.remove();
                 return;
             }
@@ -53,5 +54,23 @@ public class Util {
             }
         }
         return newArray;
+    }
+
+    public static <T> List<T> copyList(List<T> l) {
+        List<T> newList = new List<T>();
+        for (l.toFirst(); l.hasAccess(); l.next()) {
+            newList.append(l.getContent());
+        }
+        return newList;
+    }
+
+    public static CommandLineTable pointsTable(List<Player> players) {
+        CommandLineTable clt = new CommandLineTable();
+        clt.setShowVerticalLines(true);
+        clt.setHeaders("Player", "Points");
+        for (players.toFirst(); players.hasAccess(); players.next()) {
+            clt.addRow(players.getContent().toString(), ((Integer) players.getContent().getPoints()).toString());
+        }
+        return clt;
     }
 }

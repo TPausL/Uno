@@ -4,7 +4,7 @@ import java.util.Random;
 /**
  * GameClient
  */
-public class GameClient {
+public class GameClient implements HasId {
 
     protected String ip, id;
     protected Integer port;
@@ -61,7 +61,7 @@ public class GameClient {
     }
 
     public String toString() {
-        return this.id;
+        return this.ip + ":" + this.port;
     }
 
 }

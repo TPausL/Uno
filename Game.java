@@ -9,7 +9,7 @@ public class Game {
     private boolean drawn, turnDone, skip;
 
     public void start(List<Player> clients) {
-        this.connected = clients;
+        this.connected = Util.copyList(clients);
         pile = new Pile();
         playing = new String[Util.listLength(connected)];
         direction = 1;
@@ -94,10 +94,11 @@ public class Game {
     }
 
     public Card[] deal(String id) {
+        int amount = 7;
         Player p = getById(id);
-        Card[] cards = new Card[7];
+        Card[] cards = new Card[amount];
         List<Card> c = new List<>();
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < amount; i++) {
             Card t = pile.take();
             cards[i] = t;
             c.append(t);
@@ -143,6 +144,10 @@ public class Game {
                 skip = true;
                 return new Card[0];
             case "r":
+                if (playing.length == 2) {
+                    skip = true;
+                    return new Card[0];
+                }
                 reverse();
                 return new Card[0];
             default:
@@ -175,7 +180,7 @@ public class Game {
     }
 
     public Player checkWin() {
-        if (playing.length == 1)
+        if (playing.length <= 1)
             return getById(playing[0]);
         for (String id : playing) {
             if (getById(id).getCardCount() == 0) {
@@ -188,4 +193,11 @@ public class Game {
     public boolean turnDone() {
         return this.turnDone;
     }
+
+    public void resetPoints() {
+        for (connected.toFirst(); connected.hasAccess(); connected.next()) {
+            connected.getContent().resetPoints();
+        }
+    }
+
 }
